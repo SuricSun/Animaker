@@ -1,0 +1,13 @@
+#忽略vs自动生成的文件
+/.vs/
+#忽略附加依赖库
+/Dependents/
+#忽略编译器生成的exe以及中间文件
+/x64/
+/Animaker/x64/
+/Test/x64/
+#
+/Project1/
+/Project2/
+/Project3/
+/ffmpeg/
