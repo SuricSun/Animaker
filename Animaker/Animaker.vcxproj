@@ -156,6 +156,7 @@
   <ItemGroup>
     <ClCompile Include="GraphicsObject.cpp" />
     <ClCompile Include="Renderer.cpp" />
+    <ClCompile Include="TextObject.cpp" />
     <ClCompile Include="VideoEncoder.cpp" />
   </ItemGroup>
   <ItemGroup>

@@ -39,12 +39,18 @@ int main() {
 	go.matrix.xyzw3 = { 0,0,0,1 };
 	cout<<r.GOUploadVertexBuffer(&go);
 	cout << endl;
-	cout << r.GOInitMatrixBuffer(&go);
+	cout << r.GOUploadMatrixBuffer(&go);
 	cout << endl;
 
 	Surface surface;
 	cout << r.SurfaceInit(&surface);
 	cout << endl;
+
+	TextObject txtObj;
+	txtObj.SetText(L"Wow,你好呀世界！");
+	txtObj.SetRect(1920/4, 1080/4, 1920/2, 1080/2);
+
+	cout << r.TOInitText(&txtObj);
 
 	//DWORD* p = (DWORD*)malloc(1920 * 1080 * 4);
 
@@ -56,9 +62,11 @@ int main() {
 	v.CreateVideoOutput(L"c:\\game\\wow.wmv",1920,1080);
 	for (float i = 0.0f; i < 1.0f; i+=0.01) {
 		
+		r.Draw(&txtObj, &surface);
 		go.Interpolate(&from, &to, i);
 		r.GOUpdateMatrixBuffer(&go);
-		r.Render(&go, &surface);
+		r.Render(&go, &surface);	
+		r.Draw(&txtObj, &surface);
 		void* p = r.SurfaceGetData(&surface);
 		cout << i;
 		//ZeroMemory(p + i * 1920 * 4, 1920 * 4);
@@ -71,7 +79,7 @@ int main() {
 int mainaa() {
 	Renderer r;
 	r.Init();
-	r.TestFunction();
+	//r.TestFunction();
 	return 0;
 }
 
@@ -83,5 +91,32 @@ int maina() {
 		cout<<v.WriteFrame((void*)p);
 	}
 	v.CloseVideoOutput();
+	return 0;
+}
+
+int maadin() {
+
+	Renderer r;
+	cout << r.Init();
+
+	Surface surface;
+	cout << r.SurfaceInit(&surface);
+
+	TextObject txtObj;
+	txtObj.SetText(L"Wow,你好呀世界！");
+	txtObj.SetRect(0, 0, 500, 500);
+
+	cout << r.TOInitText(&txtObj);
+
+	r.Draw(&txtObj, &surface);
+
+	VideoEncoder v;
+	cout << v.CreateVideoOutput(L"c:\\game\\1000.wmv", 1920, 1080);
+	for (int i = 0; i < 100; i++) {
+		cout << v.WriteFrame((void*)r.SurfaceGetData(&surface));
+	}
+	v.CloseVideoOutput();
+	return 0;
+
 	return 0;
 }

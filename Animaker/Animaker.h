@@ -11,9 +11,10 @@
 #include<d2d1_3.h>
 #include<d3d11_4.h>
 #include<mfapi.h>
-#include <mfidl.h>
-#include <Mfreadwrite.h>
-#include <mferror.h>
+#include<mfidl.h>
+#include<Mfreadwrite.h>
+#include<mferror.h>
+#include<dwrite_3.h> 
 
 #pragma comment(lib, "mfreadwrite")
 #pragma comment(lib, "mfplat")
@@ -21,6 +22,7 @@
 #pragma comment(lib, "d2d1")
 #pragma comment(lib, "d3d11")
 #pragma comment(lib, "dxgi")
+#pragma comment(lib,"dwrite")
 
 namespace Animaker {
 
@@ -88,29 +90,29 @@ namespace Animaker {
 			RV_ERR_CreateVideoOutput,
 			RV_ERR_WriteVideo,
 			RV_ERR_CloseVideo,
-			RV_ERR_CreateMatrixBuffer
+			RV_ERR_CreateMatrixBuffer,
+			RV_ERR_CreateD2DBrush,
+			RV_ERR_CreateDWriteFactory,
+			RV_ERR_CreateTextFormat
 		};
 
 		class GraphicsObject;//forward declaration
 		class Surface;//forward declaration
+		class TextObject;
+
 		class DLLIO Renderer {
 		private:
 			bool isInitialized;
 			ID3D11Device* pc_d3dDevice;
-			ID2D1Factory* pc_d2dFactory;
 			ID3D11DeviceContext* pc_d3dDeviceCtx;
-			ID2D1RenderTarget* pc_d2dRenderTarget;
-			ID3D11Texture2D* pc_gpuTextureRT;
-			ID3D11Texture2D* pc_cpuTextureRT;
+			ID2D1Factory* pc_d2dFactory;
+			IDWriteFactory* pc_dwriteFactory;
+
 			ID3D11Texture2D* pc_depthStencilTexture;
-			ID3D11RenderTargetView* pc_rtv;
 			ID3D11DepthStencilView* pc_dsv;
 			ID3D11VertexShader* pc_vertexShader;
 			ID3D11PixelShader* pc_pixelShader;
-			D3D11_VIEWPORT viewPort;
 			ID3D11InputLayout* pc_inputLayout;
-			//tobe deleted
-			ID3D11Buffer* pc_vertexBuffer;
 		public:
 			class Vertex {
 			public:
@@ -119,13 +121,14 @@ namespace Animaker {
 			};
 			Renderer();
 			RV Init();
-			RV Render(GraphicsObject* pc_graObj,Surface* pc_surface);
+			void Render(GraphicsObject* pc_graObj,Surface* pc_surface);
+			void Draw(TextObject* pc_textObj, Surface* pc_surface);
 			RV GOUploadVertexBuffer(GraphicsObject* pc_graObj);//must be 16-byte aligned,suggest use Structure [Vertex]
-			RV GOInitMatrixBuffer(GraphicsObject* pc_go);
+			RV GOUploadMatrixBuffer(GraphicsObject* pc_go);
 			void GOUpdateMatrixBuffer(GraphicsObject* pc_go);
+			RV TOInitText(TextObject* pc_textObj);
 			RV SurfaceInit(Surface* pc_surface);
-			void* SurfaceGetData(Surface* pc_surface);
-			RV TestFunction();
+			void* SurfaceGetData(Surface* pc_surface);		
 			~Renderer();
 		};
 
@@ -136,8 +139,11 @@ namespace Animaker {
 			ID3D11Texture2D* pc_cpuTextureRT;
 			ID3D11RenderTargetView* pc_rtv;
 			D3D11_VIEWPORT viewPort;
-		public:
+			//dxwrite stuff
+			ID2D1RenderTarget* pc_d2dRenderTarget;//this is DXGISurface specific,so we cant put it in Renderer
+			ID2D1SolidColorBrush* pc_brush;
 			INT32 x, y;
+		public:
 
 			Surface(){
 				x = y = 0;
@@ -156,6 +162,7 @@ namespace Animaker {
 			friend class Renderer;
 			ID3D11Buffer* pc_gpuVertexBuffer;
 			ID3D11Buffer* pc_gpuMatrixBuffer;
+			
 		public:
 			INT32 vertexCount;
 			INT32 bufferSize;
@@ -167,6 +174,19 @@ namespace Animaker {
 			virtual void Interpolate(Math::Float4* from, Math::Float4* to, float t);
 
 			~GraphicsObject();
+		};
+
+		class DLLIO TextObject {
+		private:
+			friend class Renderer;
+			WCHAR* text;
+			INT32 textLength;
+			IDWriteTextFormat* pc_textFormat;
+			D2D1_RECT_F rect;
+		public:
+			TextObject();
+			void SetText(const WCHAR* text);
+			void SetRect(INT32 x, INT32 y, INT32 xLength, INT32 yLength);
 		};
 
 		//VideoEncoder only support 1920x1080 BGRA mp4 output with 30 fps

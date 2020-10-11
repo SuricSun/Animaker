@@ -44,37 +44,6 @@ RV Animaker::Core::Renderer::Init(){
 			return RV_ERR_CreateD3DDevice;
 		}
 		
-		//create gpuRenderTarget
-		D3D11_TEXTURE2D_DESC desc;
-		desc.Width = 1920;
-		desc.Height = 1080;
-		desc.MipLevels = desc.ArraySize = 1;
-		desc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
-		desc.SampleDesc.Count = 1;
-		desc.SampleDesc.Quality = 0;
-		desc.Usage = D3D11_USAGE_DEFAULT;
-		desc.BindFlags = D3D11_BIND_RENDER_TARGET;
-		desc.CPUAccessFlags = 0;//CPU access is not needed
-		desc.MiscFlags = 0;
-		result = this->pc_d3dDevice->CreateTexture2D(&desc, nullptr, &this->pc_gpuTextureRT);
-		if (!SUCCEEDED(result)) {
-			return RV_ERR_CreateGPUTextureRT;
-		}
-
-		//create cpuRenderTarget
-		desc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
-		desc.Usage = D3D11_USAGE_STAGING;
-		desc.BindFlags = 0;
-		result = this->pc_d3dDevice->CreateTexture2D(&desc, nullptr, &this->pc_cpuTextureRT);
-		if (!SUCCEEDED(result)) {
-			return RV_ERR_CreateCPUTextureRT;
-		}
-
-		//create render target view
-		result = this->pc_d3dDevice->CreateRenderTargetView(this->pc_gpuTextureRT, nullptr, &this->pc_rtv);
-		if (!SUCCEEDED(result)) {
-			return RV_ERR_CreateRTV;
-		}
 
 		//create depth stencil
 		CD3D11_TEXTURE2D_DESC depthStencilDesc(
@@ -96,13 +65,6 @@ RV Animaker::Core::Renderer::Init(){
 		if (!SUCCEEDED(result)) {
 			return RV_ERR_CreateDSV;
 		}
-
-		//create viewport for screen mapping in rs stage
-		ZeroMemory(&this->viewPort, sizeof(D3D11_VIEWPORT));
-		this->viewPort.Height = 1080.0f;
-		this->viewPort.Width = 1920.0f;
-		this->viewPort.MinDepth = 0;
-		this->viewPort.MaxDepth = 1;
 
 		//create shaders
 		FILE* pc_vShaderFile, * pc_pShaderFile;
@@ -178,38 +140,23 @@ RV Animaker::Core::Renderer::Init(){
 
 		delete[bufferSize] p_buffer;
 
-		//create d2d stuff
+		//d2d dwrite stuff
 		result = D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &this->pc_d2dFactory);
 		if (!SUCCEEDED(result)) {
 			return RV_ERR_CreateD2DFactory;
-		}
+		}	
 
-		D2D1_RENDER_TARGET_PROPERTIES props =
-			D2D1::RenderTargetProperties(
-				D2D1_RENDER_TARGET_TYPE_DEFAULT,
-				D2D1::PixelFormat(DXGI_FORMAT_UNKNOWN, D2D1_ALPHA_MODE_PREMULTIPLIED),
-				96,
-				96
-			);
-		IDXGISurface* pc_surface = nullptr;
-		result = pc_gpuTextureRT->QueryInterface(IID_PPV_ARGS(&pc_surface));
+		result = DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory), (IUnknown**)&this->pc_dwriteFactory);
 		if (!SUCCEEDED(result)) {
-			return RV_ERR_QueryIDXGISurface;
+			return RV_ERR_CreateDWriteFactory;
 		}
-
-		result = this->pc_d2dFactory->CreateDxgiSurfaceRenderTarget(pc_surface, &props, &this->pc_d2dRenderTarget);
-		if (!SUCCEEDED(result)) {
-			return RV_ERR_CreateD2DRenderTarget;
-		}
-
-		this->isInitialized = true;
 
 	}
 	return RV_OK;
 }
 
-RV Animaker::Core::Renderer::Render(GraphicsObject* pc_graObj,Surface* pc_surface){
-	const float teal[] = { 0.2f, 0.2f, 0.2f, 1.000f };
+void Animaker::Core::Renderer::Render(GraphicsObject* pc_graObj,Surface* pc_surface){
+	const float teal[] = { 0.0f, 0.0f, 0.0f, 1.0f };
 	this->pc_d3dDeviceCtx->ClearRenderTargetView(
 		pc_surface->pc_rtv,
 		teal
@@ -243,7 +190,10 @@ RV Animaker::Core::Renderer::Render(GraphicsObject* pc_graObj,Surface* pc_surfac
 
 	this->pc_d3dDeviceCtx->IASetInputLayout(this->pc_inputLayout);
 
-	this->pc_d3dDeviceCtx->VSSetConstantBuffers(0, 1, &pc_graObj->pc_gpuMatrixBuffer);
+	this->pc_d3dDeviceCtx->VSSetConstantBuffers(
+		0,
+		1,
+		&pc_graObj->pc_gpuMatrixBuffer);
 
 	this->pc_d3dDeviceCtx->VSSetShader(
 		this->pc_vertexShader,
@@ -251,7 +201,9 @@ RV Animaker::Core::Renderer::Render(GraphicsObject* pc_graObj,Surface* pc_surfac
 		0
 	);
 
-	this->pc_d3dDeviceCtx->RSSetViewports(1, &pc_surface->viewPort);
+	this->pc_d3dDeviceCtx->RSSetViewports(
+		1, 
+		&pc_surface->viewPort);
 
 	// Set up the pixel shader stage.
 	this->pc_d3dDeviceCtx->PSSetShader(
@@ -279,8 +231,22 @@ RV Animaker::Core::Renderer::Render(GraphicsObject* pc_graObj,Surface* pc_surfac
 	//}
 	//DWORD bytesWritten = 0;
 	//WriteFile(fileHandle, p_data, 1920 * 1080 * 4, &bytesWritten, NULL);
+}
 
-	return RV_OK;
+void Animaker::Core::Renderer::Draw(TextObject* pc_textObj, Surface* pc_surface){
+
+	pc_surface->pc_d2dRenderTarget->BeginDraw();
+
+	pc_surface->pc_d2dRenderTarget->DrawTextW(
+		pc_textObj->text,
+		pc_textObj->textLength,
+		pc_textObj->pc_textFormat,
+		pc_textObj->rect,
+		pc_surface->pc_brush
+	);
+
+	pc_surface->pc_d2dRenderTarget->EndDraw();
+
 }
 
 RV Animaker::Core::Renderer::GOUploadVertexBuffer(GraphicsObject* pc_graObj){
@@ -308,7 +274,7 @@ RV Animaker::Core::Renderer::GOUploadVertexBuffer(GraphicsObject* pc_graObj){
 	return RV_OK;
 }
 
-RV Animaker::Core::Renderer::GOInitMatrixBuffer(GraphicsObject* pc_go){
+RV Animaker::Core::Renderer::GOUploadMatrixBuffer(GraphicsObject* pc_go){
 	CD3D11_BUFFER_DESC cbDesc(
 		sizeof(Math::Float4x4),
 		D3D11_BIND_CONSTANT_BUFFER
@@ -328,6 +294,25 @@ void Animaker::Core::Renderer::GOUpdateMatrixBuffer(GraphicsObject* pc_go)
 	this->pc_d3dDeviceCtx->UpdateSubresource(pc_go->pc_gpuMatrixBuffer, 0, nullptr, &pc_go->matrix, 0, 0);
 
 	return;
+}
+
+RV Animaker::Core::Renderer::TOInitText(TextObject* pc_textObj){
+	
+	HRESULT result = this->pc_dwriteFactory->CreateTextFormat(
+		L"ËÎÌו",
+		nullptr,
+		DWRITE_FONT_WEIGHT_REGULAR,
+		DWRITE_FONT_STYLE_NORMAL,
+		DWRITE_FONT_STRETCH_NORMAL,
+		100,
+		L"en-us",
+		&pc_textObj->pc_textFormat
+	);
+	if (!SUCCEEDED(result)) {
+		return RV_ERR_CreateTextFormat;
+	}
+
+	return RV_OK;
 }
 
 RV Animaker::Core::Renderer::SurfaceInit(Surface* pc_surface){
@@ -371,6 +356,31 @@ RV Animaker::Core::Renderer::SurfaceInit(Surface* pc_surface){
 	pc_surface->viewPort.MaxDepth = 1;
 	pc_surface->viewPort.MinDepth = 0;
 
+	//set dwrite and d2d stuff for surface
+	IDXGISurface* pc_dxgiSurface = nullptr;
+	result = pc_surface->pc_gpuTextureRT->QueryInterface(IID_PPV_ARGS(&pc_dxgiSurface));
+	if (!SUCCEEDED(result)) {
+		return RV_ERR_QueryIDXGISurface;
+	}
+
+	D2D1_RENDER_TARGET_PROPERTIES props =
+		D2D1::RenderTargetProperties(
+			D2D1_RENDER_TARGET_TYPE_DEFAULT,
+			D2D1::PixelFormat(DXGI_FORMAT_UNKNOWN, D2D1_ALPHA_MODE_PREMULTIPLIED),
+			96,
+			96
+		);
+
+	result = this->pc_d2dFactory->CreateDxgiSurfaceRenderTarget(pc_dxgiSurface, &props, &pc_surface->pc_d2dRenderTarget);
+	if (!SUCCEEDED(result)) {
+		return RV_ERR_CreateD2DRenderTarget;
+	}
+
+	result = pc_surface->pc_d2dRenderTarget->CreateSolidColorBrush(D2D1::ColorF(1, 1, 0, 1), &pc_surface->pc_brush);
+	if (!SUCCEEDED(result)) {
+		return RV_ERR_CreateD2DBrush;
+	}
+
 	return RV_OK;
 }
 
@@ -384,124 +394,11 @@ void* Animaker::Core::Renderer::SurfaceGetData(Surface* pc_surface){
 	return mappedData.pData;
 }
 
-RV Animaker::Core::Renderer::TestFunction(){
-	HRESULT hr = S_OK;
-
-	Vertex rectVertices[3] =
-	{
-		{Math::Float4(0.0f,0.5f,0.5f,1.0f), Math::Float4(1.0f,0.0f,0.0f,1.0f)},
-		{Math::Float4(0.5f,-0.5f, 0.5f,1.0f), Math::Float4(0.0f,1.0f,0.0f,1.0f)},
-		{Math::Float4(-0.5f, -0.5f,0.5f,1.0f), Math::Float4(0.0f,0.0f,1.0f,1.0f)},
-	};
-
-	CD3D11_BUFFER_DESC vDesc(
-		sizeof(rectVertices),
-		D3D11_BIND_VERTEX_BUFFER
-	);
-
-	D3D11_SUBRESOURCE_DATA vData;
-	ZeroMemory(&vData, sizeof(D3D11_SUBRESOURCE_DATA));
-	vData.pSysMem = rectVertices;
-	vData.SysMemPitch = 0;
-	vData.SysMemSlicePitch = 0;
-
-	hr = this->pc_d3dDevice->CreateBuffer(
-		&vDesc,
-		&vData,
-		&this->pc_vertexBuffer
-	);
-	if (!SUCCEEDED(hr)) {
-		return (RV)-1;
-	}
-
-	//draw
-	const float teal[] = { 0.2f, 0.2f, 0.2f, 1.000f };
-	this->pc_d3dDeviceCtx->ClearRenderTargetView(
-		this->pc_rtv,
-		teal
-	);
-	this->pc_d3dDeviceCtx->ClearDepthStencilView(
-		this->pc_dsv,
-		D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL,
-		1.0f,
-		0);
-
-	this->pc_d3dDeviceCtx->OMSetRenderTargets(
-		1,
-		&this->pc_rtv,
-		this->pc_dsv
-	);
-
-	UINT stride = sizeof(Vertex);
-	UINT offset = 0;
-
-	this->pc_d3dDeviceCtx->IASetVertexBuffers(
-		0,
-		1,
-		&this->pc_vertexBuffer,
-		&stride,
-		&offset
-	);
-
-	this->pc_d3dDeviceCtx->IASetPrimitiveTopology(
-		D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST
-	);
-
-	this->pc_d3dDeviceCtx->IASetInputLayout(this->pc_inputLayout);
-
-	this->pc_d3dDeviceCtx->VSSetShader(
-		this->pc_vertexShader,
-		nullptr,
-		0
-	);
-
-	this->pc_d3dDeviceCtx->RSSetViewports(1, &this->viewPort);
-
-	// Set up the pixel shader stage.
-	this->pc_d3dDeviceCtx->PSSetShader(
-		this->pc_pixelShader,
-		nullptr,
-		0
-	);
-
-	// Calling Draw tells Direct3D to start sending commands to the graphics device.
-	this->pc_d3dDeviceCtx->Draw(
-		3,
-		0
-	);
-
-	//d2d draw
-	ID2D1SolidColorBrush* pc_brush = nullptr;
-	this->pc_d2dRenderTarget->CreateSolidColorBrush(D2D1::ColorF(1, 0, 0), &pc_brush);
-	this->pc_d2dRenderTarget->BeginDraw();
-	this->pc_d2dRenderTarget->DrawRectangle(D2D1::RectF(0, 0, 100, 100), pc_brush);
-	this->pc_d2dRenderTarget->EndDraw();
-
-	this->pc_d3dDeviceCtx->CopyResource(this->pc_cpuTextureRT, this->pc_gpuTextureRT);
-	D3D11_MAPPED_SUBRESOURCE mappedData;
-	this->pc_d3dDeviceCtx->Map(this->pc_cpuTextureRT, 0, D3D11_MAP_READ, 0, &mappedData);
-
-	BYTE* p_data = (BYTE*)mappedData.pData;
-
-	HANDLE fileHandle = CreateFile(L"C:\\game\\10.bmp", GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-	if (fileHandle == INVALID_HANDLE_VALUE) {
-		return (RV)-1;
-	}
-	DWORD bytesWritten = 0;
-	WriteFile(fileHandle, p_data, 1920 * 1080 * 4, &bytesWritten, NULL);
-
-	return RV_OK;
-}
-
 Animaker::Core::Renderer::~Renderer(){
-	this->pc_cpuTextureRT->Release();
-	this->pc_d2dRenderTarget->Release();
 	this->pc_d3dDeviceCtx->Release();
 	this->pc_depthStencilTexture->Release();
 	this->pc_dsv->Release();
-	this->pc_gpuTextureRT->Release();
 	this->pc_pixelShader->Release();
-	this->pc_rtv->Release();
 	this->pc_vertexShader->Release();
 	this->pc_d3dDevice->Release();
 	this->pc_d2dFactory->Release();
