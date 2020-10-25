@@ -1,5 +1,5 @@
 #include<iostream>
-#include"Animaker.h"
+#include<Animaker.h>
 
 using namespace std;
 using namespace Animaker::Core;
@@ -39,39 +39,81 @@ int main() {
 	go.matrix.xyzw3 = { 0,0,0,1 };
 	cout<<r.GOUploadVertexBuffer(&go);
 	cout << endl;
-	cout << r.GOUploadMatrixBuffer(&go);
+	cout << r.GOUploadWorldMatrixBuffer(&go);
 	cout << endl;
+
+	
 
 	Surface surface;
 	cout << r.SurfaceInit(&surface);
 	cout << endl;
 
 	TextObject txtObj;
-	txtObj.SetText(L"Wow,你好呀世界！");
-	txtObj.SetRect(1920/4, 1080/4, 1920/2, 1080/2);
+	txtObj.SetText(L"But what is Socket actually???");
+	txtObj.SetRect(-10.0, 10.0, 10.0, 10.0);
+	//TextObject txtObj1;
+	//txtObj1.SetText(L"你觉得这个字体怎么样呢？");
+	//txtObj1.SetRect(0, 1080 / 2, 1920, 1080 / 2);
 
 	cout << r.TOInitText(&txtObj);
+	//cout << r.TOInitText(&txtObj1);
 
 	//DWORD* p = (DWORD*)malloc(1920 * 1080 * 4);
 
 	Math::Float4 from, to;
 	from = { 0,0,0.0f,0 };
-	to = { 1,-1,0.0f,0 };
+	to = { 1,1,0.0f,0 };
+
+	surface.SetProjection(10.0f, 10.0f);
+	cout << r.SurfaceUploadProjectionMatrixBuffer(&surface);
+	r.SurfaceUpdateProjectionMatrixBuffer(&surface);
+
+	Renderer::Vertex* pc_vertBuffer;
+	pc_vertBuffer = (Renderer::Vertex*)r.GOGetGPUVertexData(&go);
+	if (pc_vertBuffer == nullptr) {
+		exit(-1);
+	}
+	pc_vertBuffer[0].pos.x = -10;
+	r.GOReleaseGPUVertexData(&go);
 
 	VideoEncoder v;
 	v.CreateVideoOutput(L"c:\\game\\wow.wmv",1920,1080);
-	for (float i = 0.0f; i < 1.0f; i+=0.01) {
+	for (float i = 0.0f; i <= 1.5f; i+=0.01) {
+		r.SurfaceClear(&surface);
 		
-		r.Draw(&txtObj, &surface);
-		go.Interpolate(&from, &to, i);
-		r.GOUpdateMatrixBuffer(&go);
-		r.Render(&go, &surface);	
-		r.Draw(&txtObj, &surface);
+		//go.Move(from, to, i);
+		//Renderer::Vertex* pc_vertBuffer;
+		//pc_vertBuffer = (Renderer::Vertex*)r.GOGetGPUVertexData(&go);
+		//if (pc_vertBuffer == nullptr) {
+		//	exit(-1);
+		//}
+		//pc_vertBuffer[0].pos.x += i/2.0f;
+		//r.GOReleaseGPUVertexData(&go);
+		//r.GOUpdateWorldMatrixBuffer(&go);
+
+		//r.GORender(&go, &surface);
+		//txtObj.t = i;
+		//txtObj.Move(from, to, i);
+		txtObj.t = i;
+		r.TORender(&txtObj, &surface);
 		void* p = r.SurfaceGetData(&surface);
-		cout << i;
+		cout << i << ",";
 		//ZeroMemory(p + i * 1920 * 4, 1920 * 4);
 		v.WriteFrame(p);
 	}
+	//for (float i = 0.0f; i <= 1.5f; i += 0.01) {
+		//r.SurfaceClear(&surface);
+		//go.Move(&from, &to, i);
+		//r.GOUpdateMatrixBuffer(&go);
+		//r.Render(&go, &surface);
+		//r.TORender(&txtObj, &surface);
+		//txtObj1.t = i;
+		//r.TORender(&txtObj1, &surface);
+		//void* p = r.SurfaceGetData(&surface);
+		//cout << i;
+		//ZeroMemory(p + i * 1920 * 4, 1920 * 4);
+		//v.WriteFrame(p);
+	//}
 	v.CloseVideoOutput();
 	return 0;
 }
@@ -108,7 +150,7 @@ int maadin() {
 
 	cout << r.TOInitText(&txtObj);
 
-	r.Draw(&txtObj, &surface);
+	r.TORender(&txtObj, &surface);
 
 	VideoEncoder v;
 	cout << v.CreateVideoOutput(L"c:\\game\\1000.wmv", 1920, 1080);

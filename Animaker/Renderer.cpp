@@ -155,12 +155,7 @@ RV Animaker::Core::Renderer::Init(){
 	return RV_OK;
 }
 
-void Animaker::Core::Renderer::Render(GraphicsObject* pc_graObj,Surface* pc_surface){
-	const float teal[] = { 0.0f, 0.0f, 0.0f, 1.0f };
-	this->pc_d3dDeviceCtx->ClearRenderTargetView(
-		pc_surface->pc_rtv,
-		teal
-	);
+void Animaker::Core::Renderer::GORender(GraphicsObject* pc_graObj,Surface* pc_surface){
 	this->pc_d3dDeviceCtx->ClearDepthStencilView(
 		this->pc_dsv,
 		D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL,
@@ -193,7 +188,14 @@ void Animaker::Core::Renderer::Render(GraphicsObject* pc_graObj,Surface* pc_surf
 	this->pc_d3dDeviceCtx->VSSetConstantBuffers(
 		0,
 		1,
-		&pc_graObj->pc_gpuMatrixBuffer);
+		&pc_graObj->pc_gpuMatrixBuffer
+	);
+	
+	this->pc_d3dDeviceCtx->VSSetConstantBuffers(
+		1,
+		1,
+		&pc_surface->pc_gpuMatrixBuffer
+	);
 
 	this->pc_d3dDeviceCtx->VSSetShader(
 		this->pc_vertexShader,
@@ -233,16 +235,40 @@ void Animaker::Core::Renderer::Render(GraphicsObject* pc_graObj,Surface* pc_surf
 	//WriteFile(fileHandle, p_data, 1920 * 1080 * 4, &bytesWritten, NULL);
 }
 
-void Animaker::Core::Renderer::Draw(TextObject* pc_textObj, Surface* pc_surface){
+void Animaker::Core::Renderer::TORender(TextObject* pc_textObj, Surface* pc_surface){
+	//set text rect
+	float textPixelX = (pc_textObj->x * pc_surface->projection.xyzw0.x + 1.0f) * pc_surface->pixelXLength;
+	float textPixelY = (pc_textObj->y * pc_surface->projection.xyzw1.y - 1.0f) * pc_surface->pixelYLength;
+	float textPixelXLength = pc_textObj->xLength * pc_surface->projection.xyzw0.x * pc_surface->pixelXLength;
+	float textPixelYLength = pc_textObj->yLength * pc_surface->projection.xyzw1.y * pc_surface->pixelYLength;
 
+	pc_textObj->rect.left = textPixelX;
+	pc_textObj->rect.top = textPixelY;
+	pc_textObj->rect.right = pc_textObj->rect.left + textPixelXLength;
+	pc_textObj->rect.bottom = pc_textObj->rect.top + textPixelYLength;
+	//begin draw
 	pc_surface->pc_d2dRenderTarget->BeginDraw();
+	
+	pc_surface->pc_linearGradientBrush->SetStartPoint(
+		D2D1::Point2F(
+			(float)pc_textObj->rect.left,
+			((float)pc_textObj->rect.bottom + (float)pc_textObj->rect.top) / 2.0f
+		)
+	);
 
+	pc_surface->pc_linearGradientBrush->SetEndPoint(
+		D2D1::Point2F(
+			(1.0f - pc_textObj->t) * (float)pc_textObj->rect.left + pc_textObj->t * (float)pc_textObj->rect.right + 1.0f,
+			((float)pc_textObj->rect.bottom + (float)pc_textObj->rect.top) / 2.0f
+		)
+	);
+	
 	pc_surface->pc_d2dRenderTarget->DrawTextW(
 		pc_textObj->text,
 		pc_textObj->textLength,
 		pc_textObj->pc_textFormat,
 		pc_textObj->rect,
-		pc_surface->pc_brush
+		pc_surface->pc_linearGradientBrush
 	);
 
 	pc_surface->pc_d2dRenderTarget->EndDraw();
@@ -256,6 +282,9 @@ RV Animaker::Core::Renderer::GOUploadVertexBuffer(GraphicsObject* pc_graObj){
 		pc_graObj->bufferSize,
 		D3D11_BIND_VERTEX_BUFFER
 	);
+
+	vDesc.Usage = D3D11_USAGE_DYNAMIC;
+	vDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
 
 	D3D11_SUBRESOURCE_DATA vData;
 	ZeroMemory(&vData, sizeof(D3D11_SUBRESOURCE_DATA));
@@ -274,7 +303,20 @@ RV Animaker::Core::Renderer::GOUploadVertexBuffer(GraphicsObject* pc_graObj){
 	return RV_OK;
 }
 
-RV Animaker::Core::Renderer::GOUploadMatrixBuffer(GraphicsObject* pc_go){
+void* Animaker::Core::Renderer::GOGetGPUVertexData(GraphicsObject* pc_go){
+	D3D11_MAPPED_SUBRESOURCE mappedData;
+	HRESULT hr = this->pc_d3dDeviceCtx->Map(pc_go->pc_gpuVertexBuffer, 0, D3D11_MAP_WRITE_NO_OVERWRITE, 0, &mappedData);
+	if (!SUCCEEDED(hr)) {
+		return nullptr;
+	}
+	return mappedData.pData;
+}
+
+void Animaker::Core::Renderer::GOReleaseGPUVertexData(GraphicsObject* pc_go){
+	this->pc_d3dDeviceCtx->Unmap(pc_go->pc_gpuVertexBuffer, 0);
+}
+
+RV Animaker::Core::Renderer::GOUploadWorldMatrixBuffer(GraphicsObject* pc_go){
 	CD3D11_BUFFER_DESC cbDesc(
 		sizeof(Math::Float4x4),
 		D3D11_BIND_CONSTANT_BUFFER
@@ -289,22 +331,21 @@ RV Animaker::Core::Renderer::GOUploadMatrixBuffer(GraphicsObject* pc_go){
 	return RV_OK;
 }
 
-void Animaker::Core::Renderer::GOUpdateMatrixBuffer(GraphicsObject* pc_go)
+void Animaker::Core::Renderer::GOUpdateWorldMatrixBuffer(GraphicsObject* pc_go)
 {
 	this->pc_d3dDeviceCtx->UpdateSubresource(pc_go->pc_gpuMatrixBuffer, 0, nullptr, &pc_go->matrix, 0, 0);
-
 	return;
 }
 
 RV Animaker::Core::Renderer::TOInitText(TextObject* pc_textObj){
 	
 	HRESULT result = this->pc_dwriteFactory->CreateTextFormat(
-		L"ËÎÌו",
+		L"Chiller",
 		nullptr,
 		DWRITE_FONT_WEIGHT_REGULAR,
 		DWRITE_FONT_STYLE_NORMAL,
 		DWRITE_FONT_STRETCH_NORMAL,
-		100,
+		200,
 		L"en-us",
 		&pc_textObj->pc_textFormat
 	);
@@ -317,8 +358,8 @@ RV Animaker::Core::Renderer::TOInitText(TextObject* pc_textObj){
 
 RV Animaker::Core::Renderer::SurfaceInit(Surface* pc_surface){
 
-	pc_surface->x = 1920;
-	pc_surface->y = 1080;
+	pc_surface->pixelXLength = 1920;
+	pc_surface->pixelYLength = 1080;
 
 	D3D11_TEXTURE2D_DESC desc;
 	desc.Width = 1920;
@@ -349,12 +390,15 @@ RV Animaker::Core::Renderer::SurfaceInit(Surface* pc_surface){
 		return RV_ERR_CreateRTV;
 	}
 	//set viewport
-	pc_surface->viewPort.Width = pc_surface->x;
-	pc_surface->viewPort.Height = pc_surface->y;
+	pc_surface->viewPort.Width = pc_surface->pixelXLength;
+	pc_surface->viewPort.Height = pc_surface->pixelYLength;
 	pc_surface->viewPort.TopLeftX = 0;
 	pc_surface->viewPort.TopLeftY = 0;
 	pc_surface->viewPort.MaxDepth = 1;
 	pc_surface->viewPort.MinDepth = 0;
+
+	//set projection
+	//float4(1 / 1.7777777778, 0, 0, 0), float4(0, 1, 0, 0), float4(0, 0, 1, 0), float4(0, 0, 0, 1)
 
 	//set dwrite and d2d stuff for surface
 	IDXGISurface* pc_dxgiSurface = nullptr;
@@ -381,7 +425,66 @@ RV Animaker::Core::Renderer::SurfaceInit(Surface* pc_surface){
 		return RV_ERR_CreateD2DBrush;
 	}
 
+	ID2D1GradientStopCollection* pGradientStops = NULL;
+
+	D2D1_GRADIENT_STOP gradientStops[3];
+	gradientStops[0].color = D2D1::ColorF(D2D1::ColorF::LightPink, 1);
+	gradientStops[0].position = 0.0f;
+	gradientStops[1].color = D2D1::ColorF(D2D1::ColorF::LightPink, 1);
+	gradientStops[1].position = 0.5f;
+	gradientStops[2].color = D2D1::ColorF(D2D1::ColorF::LightPink, 0);
+	gradientStops[2].position = 1.0f;
+	// Create the ID2D1GradientStopCollection from a previously
+	// declared array of D2D1_GRADIENT_STOP structs.
+	result = pc_surface->pc_d2dRenderTarget->CreateGradientStopCollection(
+		gradientStops,
+		3,
+		D2D1_GAMMA_2_2,
+		D2D1_EXTEND_MODE_CLAMP,
+		&pGradientStops
+	);
+
+	result = pc_surface->pc_d2dRenderTarget->CreateLinearGradientBrush(
+		D2D1::LinearGradientBrushProperties(
+			D2D1::Point2F(0, 500),
+			D2D1::Point2F(1, 500)),
+		pGradientStops,
+		&pc_surface->pc_linearGradientBrush
+	);
+
 	return RV_OK;
+}
+
+RV Animaker::Core::Renderer::SurfaceUploadProjectionMatrixBuffer(Surface* pc_surface){
+	CD3D11_BUFFER_DESC cbDesc(
+		sizeof(Math::Float4x4),
+		D3D11_BIND_CONSTANT_BUFFER
+	);
+
+	HRESULT hr = this->pc_d3dDevice->CreateBuffer(&cbDesc, nullptr, &pc_surface->pc_gpuMatrixBuffer);
+	if (!SUCCEEDED(hr)) {
+		return RV_ERR_CreateMatrixBuffer;
+	}
+
+	return RV_OK;
+}
+
+void Animaker::Core::Renderer::SurfaceUpdateProjectionMatrixBuffer(Surface* pc_surface){
+	this->pc_d3dDeviceCtx->UpdateSubresource(pc_surface->pc_gpuMatrixBuffer, 0, nullptr, &pc_surface->projection, 0, 0);
+	return;
+}
+
+void Animaker::Core::Renderer::SurfaceClear(Surface* pc_surface){
+	const float teal[] = { 0.0f, 0.0f, 0.0f, 1.0f };
+	this->pc_d3dDeviceCtx->ClearRenderTargetView(
+		pc_surface->pc_rtv,
+		teal
+	);
+	this->pc_d3dDeviceCtx->ClearDepthStencilView(
+		this->pc_dsv,
+		D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL,
+		1.0f,
+		0);
 }
 
 void* Animaker::Core::Renderer::SurfaceGetData(Surface* pc_surface){

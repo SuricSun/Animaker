@@ -61,9 +61,8 @@ namespace Animaker {
 	}
 
 	namespace Animation{	
-
 		class Interpolator {
-			virtual void Interpolate(Math::Float4* from,Math::Float4* to,float t) = 0;
+			virtual void Move(Math::Float4 from,Math::Float4 to,float t) = 0;
 		};
 	}
 
@@ -121,13 +120,18 @@ namespace Animaker {
 			};
 			Renderer();
 			RV Init();
-			void Render(GraphicsObject* pc_graObj,Surface* pc_surface);
-			void Draw(TextObject* pc_textObj, Surface* pc_surface);
-			RV GOUploadVertexBuffer(GraphicsObject* pc_graObj);//must be 16-byte aligned,suggest use Structure [Vertex]
-			RV GOUploadMatrixBuffer(GraphicsObject* pc_go);
-			void GOUpdateMatrixBuffer(GraphicsObject* pc_go);
-			RV TOInitText(TextObject* pc_textObj);
+			void GORender(GraphicsObject* pc_go,Surface* pc_surface);
+			void TORender(TextObject* pc_to, Surface* pc_surface);
+			RV GOUploadVertexBuffer(GraphicsObject* pc_go);//must be 16-byte aligned,suggest use Structure [Vertex]
+			void* GOGetGPUVertexData(GraphicsObject* pc_go);
+			void GOReleaseGPUVertexData(GraphicsObject* pc_go);
+			RV GOUploadWorldMatrixBuffer(GraphicsObject* pc_go);
+			void GOUpdateWorldMatrixBuffer(GraphicsObject* pc_go);
+			RV TOInitText(TextObject* pc_to);
 			RV SurfaceInit(Surface* pc_surface);
+			RV SurfaceUploadProjectionMatrixBuffer(Surface* pc_surface);
+			void SurfaceUpdateProjectionMatrixBuffer(Surface* pc_surface);
+			void SurfaceClear(Surface* pc_surface);
 			void* SurfaceGetData(Surface* pc_surface);		
 			~Renderer();
 		};
@@ -137,16 +141,26 @@ namespace Animaker {
 			friend class Renderer;
 			ID3D11Texture2D* pc_gpuTextureRT;
 			ID3D11Texture2D* pc_cpuTextureRT;
+			ID3D11Buffer* pc_gpuMatrixBuffer;//projection matrix
 			ID3D11RenderTargetView* pc_rtv;
 			D3D11_VIEWPORT viewPort;
+			Math::Float4x4 projection;//my coord
 			//dxwrite stuff
 			ID2D1RenderTarget* pc_d2dRenderTarget;//this is DXGISurface specific,so we cant put it in Renderer
 			ID2D1SolidColorBrush* pc_brush;
-			INT32 x, y;
+			ID2D1LinearGradientBrush* pc_linearGradientBrush;
+			INT32 pixelXLength, pixelYLength;
 		public:
 
 			Surface(){
-				x = y = 0;
+				pixelXLength = pixelYLength = 0;
+			}
+
+			void SetProjection(float x, float y) {
+				this->projection.xyzw0 = { 1.0f / x,0.0f,0.0f,0.0f };
+				this->projection.xyzw1 = { 0.0f,1.0f / y,0.0f,0.0f };
+				this->projection.xyzw2 = { 0.0f,0.0f,1.0f,0.0f };
+				this->projection.xyzw3 = { 0.0f,0.0f,0.0f,1.0f };
 			}
 
 			~Surface() {
@@ -171,22 +185,31 @@ namespace Animaker {
 
 			GraphicsObject();
 
-			virtual void Interpolate(Math::Float4* from, Math::Float4* to, float t);
+			virtual void Move(Math::Float4 from, Math::Float4 to, float t);
 
 			~GraphicsObject();
 		};
 
-		class DLLIO TextObject {
+		class DLLIO TextObject : Animation::Interpolator {
 		private:
 			friend class Renderer;
 			WCHAR* text;
 			INT32 textLength;
 			IDWriteTextFormat* pc_textFormat;
 			D2D1_RECT_F rect;
+			float x;
+			float y;
+			float xLength;
+			float yLength;
+			//alpha
+			
 		public:
+			float t;
 			TextObject();
 			void SetText(const WCHAR* text);
-			void SetRect(INT32 x, INT32 y, INT32 xLength, INT32 yLength);
+			void SetRect(float x, float y, float xLength, float yLength);
+			//
+			virtual void Move(Math::Float4 from, Math::Float4 to, float t);
 		};
 
 		//VideoEncoder only support 1920x1080 BGRA mp4 output with 30 fps

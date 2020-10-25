@@ -1,10 +1,16 @@
-//
-
-cbuffer ConstantBuffer : register(b0)
+//this code is only for [GraphicsObject]
+//[TextObject] wont use it
+cbuffer cb0 : register(b0)
 {
     float4x4 world;      // world matrix for object
     //float4x4 view;        // view matrix
     //float4x4 projection;  // projection matrix
+};
+cbuffer cb1 : register(b1)
+{
+    //float4x4 world;      // world matrix for object
+    //float4x4 view;        // view matrix
+    float4x4 projection;  // projection matrix
 };
 
 struct VS_INPUT
@@ -23,12 +29,12 @@ PS_INPUT main(VS_INPUT inVert)
 {
     PS_INPUT outVert;
 
-    float4x4 projection = { float4(1 / 1.7777777778,0,0,0),float4(0,1,0,0),float4(0,0,1,0),float4(0,0,0,1) };
+    //float4x4 projection = { float4(1 / 1.7777777778,0,0,0),float4(0,1,0,0),float4(0,0,1,0),float4(0,0,0,1) };
 
     inVert.pos = mul(inVert.pos, world);
     //inVert.pos = mul(inVert.pos, view);
     inVert.pos = mul(inVert.pos, projection);
-   // inVert.color = float4(world._11, world._11, world._11, world._11);
+    //inVert.color = float4(world._11, world._11, world._11, world._11);
 
     outVert.pos = inVert.pos;
     outVert.color = inVert.color;

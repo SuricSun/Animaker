@@ -41,4 +41,7 @@
       <Filter>资源文件</Filter>
     </FxCompile>
   </ItemGroup>
+  <ItemGroup>
+    <None Include="..\x64\Debug\VertexShader.cso" />
+  </ItemGroup>
 </Project>
