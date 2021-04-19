@@ -1,6 +1,6 @@
 # Animaker
-## A Simple Library To Make Simple Videos
-+ Based Direct3D, Direct2D and DirectWrite
+## 用来制作插值动画的库
++ 基于 Direct3D, Direct2D and DirectWrite
 ## How to use
 + Architecture
 ```
